@@ -1,12 +1,12 @@
-const CitizenRequest = require('../models/CitizenRequest');
+const { citizenRequestsRef } = require('../config/firebase');
 const geminiService = require('../services/geminiService');
 
 /**
  * POST /api/requests
  * Receives a citizen's development request text, uses Gemini AI to
- * categorize it, then persists the enriched document to MongoDB.
+ * categorize it, then persists the enriched document to Firestore.
  * 
- * Flow: Raw text → Gemini AI analysis → Structured document → MongoDB
+ * Flow: Raw text → Gemini AI analysis → Structured document → Firestore
  */
 exports.createRequest = async (req, res) => {
   try {
@@ -33,14 +33,12 @@ exports.createRequest = async (req, res) => {
     // ─── Gemini AI does the heavy lifting here ───
     // It takes raw, potentially messy citizen text and extracts
     // a structured category, severity score, and English summary.
-    // This transforms unstructured complaints into queryable data.
     console.log('   🤖 Sending to Gemini AI for categorization...');
     const aiAnalysis = await geminiService.categorizeRequest(originalText);
     console.log(`   ✅ AI Result: Category=${aiAnalysis.aiCategory}, Severity=${aiAnalysis.aiSeverity}/5`);
     console.log(`   📋 Summary: "${aiAnalysis.aiSummary}"`);
 
-    // Build and save the full document
-    const citizenRequest = new CitizenRequest({
+    const requestData = {
       originalText: originalText.trim(),
       language: language || 'en',
       location: {
@@ -51,10 +49,16 @@ exports.createRequest = async (req, res) => {
       },
       aiCategory: aiAnalysis.aiCategory,
       aiSeverity: aiAnalysis.aiSeverity,
-      aiSummary: aiAnalysis.aiSummary
-    });
+      aiSummary: aiAnalysis.aiSummary,
+      timestamp: new Date().toISOString()
+    };
 
-    const saved = await citizenRequest.save();
+    const docRef = await citizenRequestsRef.add(requestData);
+
+    const saved = {
+      _id: docRef.id,
+      ...requestData
+    };
 
     res.status(201).json({
       success: true,
@@ -78,45 +82,56 @@ exports.createRequest = async (req, res) => {
 exports.getRequests = async (req, res) => {
   try {
     const { category, state } = req.query;
-    const filter = {};
 
+    let query = citizenRequestsRef;
     if (category && category !== 'all') {
-      filter.aiCategory = category;
+      query = query.where('aiCategory', '==', category);
     }
     if (state && state !== 'all') {
-      filter['location.state'] = state;
+      query = query.where('location.state', '==', state);
     }
 
-    // Limit to most recent 500 to prevent massive payloads
-    const requests = await CitizenRequest
-      .find(filter)
-      .sort({ timestamp: -1 })
-      .limit(500)
-      .lean();
+    const snapshot = await query.get();
 
-    // Compute summary stats for the dashboard
-    const stats = await CitizenRequest.aggregate([
-      { $group: {
-        _id: null,
-        total: { $sum: 1 },
-        avgSeverity: { $avg: '$aiSeverity' },
-        categories: { $push: '$aiCategory' }
-      }}
-    ]);
-
-    const categoryCounts = {};
-    if (stats.length > 0) {
-      stats[0].categories.forEach(c => {
-        categoryCounts[c] = (categoryCounts[c] || 0) + 1;
+    let requests = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      requests.push({
+        _id: doc.id,
+        ...data
       });
+    });
+
+    // Sort descending by timestamp in memory (avoids composite index requirement in Firestore)
+    requests.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+
+    // Limit to 500
+    if (requests.length > 500) {
+      requests = requests.slice(0, 500);
     }
+
+    // Compute summary stats for dashboard
+    const categoryCounts = {};
+    let totalSeverity = 0;
+
+    requests.forEach(r => {
+      if (r.aiCategory) {
+        categoryCounts[r.aiCategory] = (categoryCounts[r.aiCategory] || 0) + 1;
+      }
+      if (typeof r.aiSeverity === 'number') {
+        totalSeverity += r.aiSeverity;
+      }
+    });
+
+    const total = requests.length;
+    const avgSeverity = total > 0 ? (totalSeverity / total).toFixed(1) : '0.0';
 
     res.json({
       success: true,
-      count: requests.length,
+      count: total,
       stats: {
-        total: stats[0]?.total || 0,
-        avgSeverity: stats[0]?.avgSeverity?.toFixed(1) || '0.0',
+        total,
+        avgSeverity,
         byCategory: categoryCounts
       },
       data: requests
@@ -137,36 +152,67 @@ exports.getRequests = async (req, res) => {
  */
 exports.getDistrictDemand = async (req, res) => {
   try {
-    const districtData = await CitizenRequest.aggregate([
-      {
-        $group: {
-          _id: '$location.district',
-          state: { $first: '$location.state' },
-          totalRequests: { $sum: 1 },
-          avgSeverity: { $avg: '$aiSeverity' },
-          topCategory: { $first: '$aiCategory' },
-          categories: { $push: '$aiCategory' }
-        }
-      },
-      { $sort: { totalRequests: -1 } },
-      { $limit: 20 }
-    ]);
+    const snapshot = await citizenRequestsRef.get();
+    
+    // Aggregate by district in memory
+    const districtMap = new Map();
 
-    // Count categories per district
-    const result = districtData.map(d => {
-      const catCounts = {};
-      d.categories.forEach(c => { catCounts[c] = (catCounts[c] || 0) + 1; });
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      const district = data.location?.district;
+      const state = data.location?.state;
+      if (!district) return;
+
+      if (!districtMap.has(district)) {
+        districtMap.set(district, {
+          district,
+          state: state || '',
+          totalRequests: 0,
+          totalSeverity: 0,
+          categories: {}
+        });
+      }
+
+      const entry = districtMap.get(district);
+      entry.totalRequests += 1;
+      if (typeof data.aiSeverity === 'number') {
+        entry.totalSeverity += data.aiSeverity;
+      }
+      if (data.aiCategory) {
+        entry.categories[data.aiCategory] = (entry.categories[data.aiCategory] || 0) + 1;
+      }
+    });
+
+    // Format & calculate topCategory and avgSeverity
+    const result = Array.from(districtMap.values()).map(d => {
+      let topCategory = '';
+      let maxCatCount = 0;
+      for (const [cat, count] of Object.entries(d.categories)) {
+        if (count > maxCatCount) {
+          maxCatCount = count;
+          topCategory = cat;
+        }
+      }
+
+      const avgSeverity = d.totalRequests > 0 
+        ? Math.round((d.totalSeverity / d.totalRequests) * 10) / 10 
+        : 0;
+
       return {
-        district: d._id,
+        district: d.district,
         state: d.state,
         totalRequests: d.totalRequests,
-        avgSeverity: Math.round(d.avgSeverity * 10) / 10,
-        topCategory: d.topCategory,
-        categories: catCounts
+        avgSeverity,
+        topCategory,
+        categories: d.categories
       };
     });
 
-    res.json({ success: true, data: result });
+    // Sort by totalRequests descending and take top 20
+    result.sort((a, b) => b.totalRequests - a.totalRequests);
+    const top20 = result.slice(0, 20);
+
+    res.json({ success: true, data: top20 });
   } catch (error) {
     console.error('Error fetching district demand:', error);
     res.status(500).json({

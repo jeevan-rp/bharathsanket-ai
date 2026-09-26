@@ -1,74 +1,115 @@
-import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
-import CitizenPortal from './components/CitizenPortal';
-import Dashboard from './components/Dashboard';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Toaster } from 'react-hot-toast';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import Login from './components/Login';
+import CitizenDashboard from './components/CitizenDashboard';
+import OfficialDashboard from './components/OfficialDashboard';
+import ProtectedRoute from './components/ProtectedRoute';
 
-/**
- * App Component
- * Top-level routing between Citizen Portal and Policymaker Dashboard.
- * Uses tab-style navigation with React Router NavLink.
- */
+function RootRedirect() {
+  const { isAuthenticated, role, loading } = useAuth();
+
+  if (loading) return null;
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (role === 'official') {
+    return <Navigate to="/official/dashboard" replace />;
+  }
+
+  return <Navigate to="/citizen/dashboard" replace />;
+}
+
+const pageVariants = {
+  initial: { opacity: 0, y: 12 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
+  exit: { opacity: 0, y: -12, transition: { duration: 0.25, ease: 'easeIn' } }
+};
+
+function AnimatedRoutes() {
+  const location = useLocation();
+
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        {/* Public Login Route */}
+        <Route
+          path="/login"
+          element={
+            <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" className="w-full">
+              <Login />
+            </motion.div>
+          }
+        />
+
+        {/* Protected Citizen Dashboard */}
+        <Route
+          path="/citizen/dashboard"
+          element={
+            <ProtectedRoute allowedRole="citizen">
+              <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" className="w-full">
+                <CitizenDashboard />
+              </motion.div>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Protected Official Dashboard */}
+        <Route
+          path="/official/dashboard"
+          element={
+            <ProtectedRoute allowedRole="official">
+              <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" className="w-full h-full">
+                <OfficialDashboard />
+              </motion.div>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Root and Fallback Redirects */}
+        <Route path="/" element={<RootRedirect />} />
+        <Route path="*" element={<RootRedirect />} />
+      </Routes>
+    </AnimatePresence>
+  );
+}
+
 export default function App() {
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      {/* ─── Header ─── */}
-      <header className="bg-gradient-to-r from-india-navy via-india-navy to-indigo-900 text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {/* India tricolor accent */}
-            <div className="flex h-8 rounded overflow-hidden shadow">
-              <div className="w-3 bg-india-saffron" />
-              <div className="w-3 bg-white" />
-              <div className="w-3 bg-india-green" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">
-                BharatSanket <span className="text-india-saffron">AI</span>
-              </h1>
-              <p className="text-[10px] text-indigo-300 -mt-1 tracking-wide">
-                Citizen Infrastructure Intelligence Platform
-              </p>
-            </div>
-          </div>
-
-          {/* Tab Navigation */}
-          <nav className="flex gap-1">
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) =>
-                `px-4 py-2 rounded-t-lg text-sm font-medium transition-all ${
-                  isActive
-                    ? 'bg-white/15 text-white border-b-2 border-india-saffron'
-                    : 'text-indigo-200 hover:text-white hover:bg-white/5'
-                }`
-              }
-            >
-              🏘️ Citizen Portal
-            </NavLink>
-            <NavLink
-              to="/dashboard"
-              className={({ isActive }) =>
-                `px-4 py-2 rounded-t-lg text-sm font-medium transition-all ${
-                  isActive
-                    ? 'bg-white/15 text-white border-b-2 border-india-saffron'
-                    : 'text-indigo-200 hover:text-white hover:bg-white/5'
-                }`
-              }
-            >
-              📊 Dashboard
-            </NavLink>
-          </nav>
-        </div>
-      </header>
-
-      {/* ─── Main Content ─── */}
-      <main className="flex-1">
-        <Routes>
-          <Route path="/" element={<CitizenPortal />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </main>
-    </div>
+    <AuthProvider>
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-[#070d17] text-slate-100 font-sans selection:bg-amber-500/30 selection:text-amber-200">
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            className: 'glass-toast',
+            style: {
+              background: 'rgba(15, 23, 42, 0.9)',
+              color: '#f8fafc',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              backdropFilter: 'blur(16px)',
+              borderRadius: '16px',
+              fontSize: '12px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6)',
+            },
+            success: {
+              iconTheme: {
+                primary: '#10b981',
+                secondary: '#0f172a',
+              },
+            },
+            error: {
+              iconTheme: {
+                primary: '#ef4444',
+                secondary: '#0f172a',
+              },
+            },
+          }}
+        />
+        <AnimatedRoutes />
+      </div>
+    </AuthProvider>
   );
 }

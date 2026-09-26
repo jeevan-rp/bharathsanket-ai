@@ -1,14 +1,9 @@
 /**
- * AIRecommendations Component
- * ============================
- * Triggers the /api/ai/recommend endpoint which:
- * 1. Fetches ALL citizen requests + government infrastructure data
- * 2. Sends aggregated data to Gemini AI
- * 3. Gemini cross-references demand vs infrastructure gaps
- * 4. Returns top 3 project recommendations
- * 
- * This is where the AI does the real policy intelligence work —
- * turning raw citizen complaints into actionable project briefs.
+ * AIRecommendations Component (Samvaad Infra-AI)
+ * ===============================================
+ * Triggers the /api/ai/recommend endpoint to aggregate complaints and
+ * compute Gemini AI policy recommendations.
+ * Upgraded to Dark Theme & Glassmorphism styling.
  */
 import { useState } from 'react';
 import { getAIRecommendations } from '../services/api';
@@ -36,97 +31,106 @@ export function AIRecommendations() {
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-slate-900/90 text-slate-200">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-100 shrink-0">
-        <h3 className="font-bold text-sm text-gray-800">🤖 AI Project Recommendations</h3>
-        <p className="text-[10px] text-gray-400 mt-0.5">
-          Gemini analyzes demand vs infrastructure gaps
-        </p>
+      <div className="px-4 py-3 border-b border-slate-800 shrink-0 flex items-center justify-between">
+        <div>
+          <h3 className="font-bold text-sm text-slate-100 flex items-center gap-1.5">
+            <span className="text-indigo-400">🤖</span>
+            <span>AI Policy Recommendations</span>
+          </h3>
+          <p className="text-[10px] text-slate-400 mt-0.5">
+            Gemini cross-references complaints with district infrastructure gaps
+          </p>
+        </div>
+        {recommendations.length > 0 && (
+          <button
+            onClick={generate}
+            disabled={loading}
+            className="text-xs text-amber-400 hover:text-amber-300 font-medium transition"
+          >
+            {loading ? 'Analyzing...' : 'Regenerate'}
+          </button>
+        )}
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto custom-scrollbar p-3">
-        {/* Generate Button */}
+        {/* Generate Button Initial State */}
         {!recommendations.length && !loading && !error && (
           <div className="text-center py-6">
             <div className="text-3xl mb-2">🧠</div>
-            <p className="text-xs text-gray-400 mb-4">
-              Generate AI-powered project recommendations based on citizen demand patterns and infrastructure data.
+            <p className="text-xs text-slate-400 mb-4 max-w-xs mx-auto">
+              Run Gemini AI analysis across citizen demand patterns and district infrastructure baselines.
             </p>
             <button
               onClick={generate}
-              className="px-4 py-2 bg-gradient-to-r from-india-saffron to-orange-500 text-white text-sm font-semibold rounded-lg hover:from-orange-500 hover:to-orange-600 transition shadow-md hover:shadow-lg"
+              className="px-4 py-2 bg-gradient-to-r from-amber-500 via-orange-500 to-emerald-500 hover:from-amber-600 hover:to-emerald-600 text-white text-xs font-semibold rounded-xl transition shadow-lg shadow-orange-500/20"
             >
-              Generate Recommendations
+              Generate AI Recommendations
             </button>
           </div>
         )}
 
         {/* Loading State */}
         {loading && (
-          <div className="text-center py-8">
-            <div className="relative inline-block">
-              <div className="animate-spin h-10 w-10 border-2 border-orange-200 border-t-orange-500 rounded-full" />
-              <span className="absolute inset-0 flex items-center justify-center text-xs">🤖</span>
-            </div>
-            <p className="text-xs text-gray-500 mt-3">Gemini AI is analyzing {meta?.requestsAnalyzed || '...'} requests...</p>
-            <p className="text-[10px] text-gray-400 mt-1">Cross-referencing demand data with infrastructure indices</p>
+          <div className="py-8 text-center space-y-3">
+            <div className="animate-spin h-7 w-7 border-2 border-amber-400/30 border-t-amber-400 rounded-full mx-auto" />
+            <p className="text-xs text-slate-300 font-medium">Gemini 2.5 Flash analyzing district demand...</p>
+            <p className="text-[10px] text-slate-500">Cross-referencing citizen complaints with government indices</p>
           </div>
         )}
 
-        {/* Error */}
+        {/* Error State */}
         {error && (
-          <div className="bg-red-50 text-red-600 text-xs p-3 rounded-lg border border-red-100">
-            ⚠️ {error}
-          </div>
-        )}
-
-        {/* Recommendations Cards */}
-        {recommendations.map((rec, i) => (
-          <div
-            key={i}
-            className="bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-lg p-3 mb-3 animate-fade-in-up shadow-sm hover:shadow-md transition"
-            style={{ animationDelay: `${i * 150}ms` }}
-          >
-            {/* Project header with rank */}
-            <div className="flex items-start gap-2 mb-2">
-              <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${
-                i === 0 ? 'bg-amber-500' : i === 1 ? 'bg-gray-400' : 'bg-orange-400'
-              }`}>
-                {i + 1}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h4 className="font-bold text-sm text-gray-800 leading-tight">{rec.projectType}</h4>
-                <p className="text-[10px] text-gray-400">{rec.district}, {rec.state}</p>
-              </div>
-            </div>
-
-            {/* Reasoning */}
-            <p className="text-xs text-gray-600 leading-relaxed mb-2">{rec.reason}</p>
-
-            {/* Beneficiaries */}
-            <div className="flex items-center gap-1 bg-green-50 rounded-md px-2 py-1">
-              <span className="text-[10px]">👥</span>
-              <span className="text-[10px] text-green-700 font-medium">
-                ~{rec.estimatedBeneficiaries.toLocaleString()} estimated beneficiaries
-              </span>
-            </div>
-          </div>
-        ))}
-
-        {/* Meta info after generation */}
-        {meta && recommendations.length > 0 && (
-          <div className="text-center py-2">
+          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs">
+            <p className="font-semibold mb-1">Analysis Failed</p>
+            <p className="text-slate-400">{error}</p>
             <button
               onClick={generate}
-              className="text-xs text-indigo-500 hover:text-indigo-700 font-medium"
+              className="mt-2 text-[11px] text-amber-400 underline font-semibold"
             >
-              🔄 Regenerate
+              Try again
             </button>
-            <p className="text-[10px] text-gray-300 mt-1">
-              Based on {meta.requestsAnalyzed} requests across {meta.districtsCompared} districts
-            </p>
+          </div>
+        )}
+
+        {/* Recommendations List */}
+        {recommendations.length > 0 && !loading && (
+          <div className="space-y-3">
+            {meta && (
+              <div className="text-[10px] text-slate-500 flex items-center justify-between pb-1">
+                <span>{meta.requestsAnalyzed} requests analyzed</span>
+                <span>{meta.districtsCompared} districts compared</span>
+              </div>
+            )}
+
+            {recommendations.map((rec, i) => (
+              <div
+                key={i}
+                className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 space-y-2 hover:border-slate-700 transition animate-fade-in-up"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-400">
+                    Priority #{i + 1}: {rec.projectType}
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    📍 {rec.district}, {rec.state}
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {rec.reason}
+                </p>
+
+                {rec.estimatedBeneficiaries && (
+                  <div className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
+                    <span>👥 Est. Beneficiaries:</span>
+                    <span>{rec.estimatedBeneficiaries.toLocaleString()} citizens</span>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>

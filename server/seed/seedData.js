@@ -1,18 +1,12 @@
 require('dotenv').config();
-const mongoose = require('mongoose');
-const GovDataset = require('../models/GovDataset');
+const { db, govDatasetsRef } = require('../config/firebase');
 
 /**
- * Seed Script: Populate GovDataset collection with realistic mock data
+ * Seed Script: Populate gov_datasets Firestore collection with realistic mock data
  * representing infrastructure indices across Indian districts.
  * 
  * Run: node server/seed/seedData.js
- * 
- * In production, this data would come from government APIs like
- * data.gov.in or the RBI's district-level infrastructure database.
  */
-
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/bharatsanket';
 
 const mockData = [
   // Uttar Pradesh
@@ -99,29 +93,41 @@ const mockData = [
 
 async function seedDatabase() {
   try {
-    console.log('🌱 Connecting to MongoDB...');
-    await mongoose.connect(MONGO_URI);
-    console.log('✅ Connected\n');
+    console.log('🌱 Connecting to Firestore for seeding...');
 
-    // Clear existing data
-    await GovDataset.deleteMany({});
-    console.log('🗑️  Cleared existing GovDataset records');
+    // Clear existing GovDataset records
+    const existing = await govDatasetsRef.get();
+    if (!existing.empty) {
+      const deleteBatch = db.batch();
+      existing.docs.forEach(doc => {
+        deleteBatch.delete(doc.ref);
+      });
+      await deleteBatch.commit();
+      console.log(`🗑️  Cleared ${existing.size} existing GovDataset records`);
+    }
 
-    // Insert mock data
-    const result = await GovDataset.insertMany(mockData);
-    console.log(`✅ Inserted ${result.length} district records\n`);
+    // Insert mock data in chunks (Firestore limit is 500 ops per batch)
+    const insertBatch = db.batch();
+    mockData.forEach(item => {
+      // Create a deterministic doc ID using state and district
+      const docId = `${item.state}_${item.district}`.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+      const docRef = govDatasetsRef.doc(docId);
+      insertBatch.set(docRef, item);
+    });
+
+    await insertBatch.commit();
+    console.log(`✅ Inserted ${mockData.length} district records into Firestore\n`);
 
     console.log('Sample data:');
-    result.slice(0, 5).forEach(d => {
+    mockData.slice(0, 5).forEach(d => {
       console.log(`  ${d.district}, ${d.state} — Infra: ${d.currentInfraIndex}/10, Pop: ${(d.population/100000).toFixed(1)}L, Budget: ₹${d.budgetAllocation}Cr`);
     });
-    console.log(`  ... and ${result.length - 5} more districts`);
+    console.log(`  ... and ${mockData.length - 5} more districts`);
 
   } catch (error) {
     console.error('❌ Seed failed:', error.message);
   } finally {
-    await mongoose.connection.close();
-    console.log('\n🔒 Database connection closed');
+    console.log('\n🔒 Seeding complete');
   }
 }
 

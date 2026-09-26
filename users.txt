@@ -1,0 +1,3 @@
+Role,Name,Email,Password
+Citizen,Rajesh Kumar,citizen@bharatsanket.in,Demo@123
+Government Official,Priya Sharma,official@bharatsanket.in,Admin@123

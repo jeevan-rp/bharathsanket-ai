@@ -1,5 +1,4 @@
-const CitizenRequest = require('../models/CitizenRequest');
-const GovDataset = require('../models/GovDataset');
+const { citizenRequestsRef, govDatasetsRef } = require('../config/firebase');
 const geminiService = require('../services/geminiService');
 
 /**
@@ -8,26 +7,32 @@ const geminiService = require('../services/geminiService');
  * This is the core AI-powered policy recommendation endpoint.
  * 
  * How it works:
- * 1. Fetches ALL citizen requests and government infrastructure data from MongoDB
+ * 1. Fetches ALL citizen requests and government infrastructure data from Firestore
  * 2. Aggregates citizen requests by district (volume, category breakdown, avg severity)
  * 3. Sends this combined dataset to Gemini AI
  * 4. Gemini cross-references demand patterns against infrastructure indices
  * 5. Returns the top 3 recommended projects for policymakers
- * 
- * This is where Gemini does the real "heavy lifting" for policy intelligence —
- * it identifies patterns a human analyst might miss and generates actionable
- * project recommendations with justifications in seconds.
  */
 exports.getRecommendations = async (req, res) => {
   try {
     console.log('\n🔬 Generating AI policy recommendations...');
-    console.log('   Fetching citizen requests and government data...');
+    console.log('   Fetching citizen requests and government data from Firestore...');
 
     // Fetch all data in parallel for speed
-    const [citizenRequests, govData] = await Promise.all([
-      CitizenRequest.find().lean(),
-      GovDataset.find().lean()
+    const [requestsSnapshot, govSnapshot] = await Promise.all([
+      citizenRequestsRef.get(),
+      govDatasetsRef.get()
     ]);
+
+    const citizenRequests = [];
+    requestsSnapshot.forEach(doc => {
+      citizenRequests.push({ _id: doc.id, ...doc.data() });
+    });
+
+    const govData = [];
+    govSnapshot.forEach(doc => {
+      govData.push({ _id: doc.id, ...doc.data() });
+    });
 
     console.log(`   📊 Found ${citizenRequests.length} requests, ${govData.length} districts in dataset`);
 
@@ -40,13 +45,6 @@ exports.getRecommendations = async (req, res) => {
     }
 
     // ─── Gemini AI analyzes the combined dataset ───
-    // The AI receives:
-    // - Aggregated citizen demand (volume, severity, categories per district)
-    // - Current infrastructure index per district (1-10 scale)
-    // - Budget allocation and population data
-    //
-    // It then identifies the most impactful projects by finding
-    // districts where HIGH demand meets LOW infrastructure.
     console.log('   🤖 Sending aggregated data to Gemini AI for analysis...');
     const recommendations = await geminiService.generateRecommendations(
       citizenRequests,
@@ -68,6 +66,42 @@ exports.getRecommendations = async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to generate AI recommendations'
+    });
+  }
+};
+
+/**
+ * POST /api/ai/briefing
+ * Generates an authoritative municipal commissioner executive briefing
+ * synthesized across real-time grievance records.
+ */
+exports.getExecutiveBriefing = async (req, res) => {
+  try {
+    let reports = req.body?.reports;
+    if (!reports || !Array.isArray(reports) || reports.length === 0) {
+      const { infrastructureReportsRef } = require('../config/firebase');
+      const snapshot = await infrastructureReportsRef.get();
+      reports = [];
+      snapshot.forEach(doc => {
+        reports.push({ _id: doc.id, ...doc.data() });
+      });
+    }
+
+    const briefing = await geminiService.generateExecutiveBriefing(reports);
+
+    res.json({
+      success: true,
+      data: briefing,
+      meta: {
+        totalReports: reports.length,
+        generatedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('Error generating executive briefing:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate executive briefing'
     });
   }
 };
