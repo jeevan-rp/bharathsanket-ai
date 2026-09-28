@@ -15,11 +15,11 @@ import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/
  * Firebase Client SDK Configuration (BharatSanket AI)
  */
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBjBNNCchvuhKskw7Ecb6ZpqvTA5UeuJdU",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "bharatsanket-ai.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "bharatsanket-ai",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "bharatsanket-ai.appspot.com",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:258975963909:web:bharatsanket-ai"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyABeNn5viStD9ZLqGUQQnvwh4ciAIO7moQ",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "bharatsanket-ai-01.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "bharatsanket-ai-01",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "bharatsanket-ai-01.firebasestorage.app",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:34851951342:web:5edc2f5b1a2c44f42619ff"
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
