@@ -81,4 +81,9 @@ async function start() {
   }
 }
 
-start();
+// Start HTTP listener only when running locally (not in Vercel serverless environment)
+if (!process.env.VERCEL) {
+  start();
+}
+
+module.exports = app;

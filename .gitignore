@@ -7,3 +7,6 @@ mongo_data/
 d
 *serviceAccountKey*.json
 serviceAccountKey.json
+.vercel
+deploy.txt
+firebase.json
