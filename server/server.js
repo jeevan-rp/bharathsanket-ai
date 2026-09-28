@@ -20,14 +20,39 @@ app.use('/api/requests', requestRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/ai', aiRoutes);
 
-// Health check endpoint (useful for Cloud Run monitoring)
-app.get('/api/health', (req, res) => {
+// Health check endpoint (verifies Firestore connectivity & credentials)
+app.get('/api/health', async (req, res) => {
+  let dbTest = 'disconnected';
+  let dbError = null;
+  try {
+    if (db) {
+      await db.collection('infrastructure_reports').limit(1).get();
+      dbTest = 'connected';
+    }
+  } catch (err) {
+    dbTest = 'error';
+    dbError = err.message;
+  }
+
+  const hasCredentials = !!(
+    process.env.FIREBASE_SERVICE_ACCOUNT_KEY || 
+    (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) || 
+    process.env.FIREBASE_SERVICE_ACCOUNT_KEY_PATH
+  );
+
   res.json({
-    status: 'healthy',
-    service: 'Samvaad Infra-AI',
+    status: dbTest === 'connected' ? 'healthy' : 'degraded',
+    service: 'BharatSanket AI',
     timestamp: new Date().toISOString(),
+    environment: process.env.VERCEL ? 'vercel-serverless' : 'standard-node',
     dbType: 'Firebase Firestore',
-    dbStatus: db ? 'initialized' : 'disconnected'
+    dbStatus: dbTest,
+    dbError: dbError,
+    diagnostics: {
+      hasFirebaseCredentials: hasCredentials,
+      hasGeminiApiKey: !!process.env.GEMINI_API_KEY,
+      projectId: process.env.FIREBASE_PROJECT_ID || 'bharatsanket-ai-01'
+    }
   });
 });
 
@@ -58,7 +83,11 @@ app.get('*', (req, res) => {
 // ─── Global Error Handler ───
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
-  res.status(500).json({ success: false, error: 'Internal server error' });
+  res.status(500).json({ 
+    success: false, 
+    error: 'Internal server error',
+    details: err.message
+  });
 });
 
 // ─── Server Start ───

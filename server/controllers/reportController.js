@@ -122,7 +122,8 @@ exports.createReport = async (req, res) => {
     console.error('Error creating infrastructure report:', error);
     return res.status(500).json({
       success: false,
-      error: 'Failed to process infrastructure report'
+      error: 'Failed to process infrastructure report',
+      details: error.message
     });
   }
 };
@@ -335,7 +336,8 @@ exports.getReports = async (req, res) => {
     console.error('Error fetching reports:', error);
     return res.status(500).json({
       success: false,
-      error: 'Failed to fetch infrastructure reports'
+      error: 'Failed to fetch infrastructure reports',
+      details: error.message
     });
   }
 };
